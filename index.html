@@ -115,6 +115,7 @@
             <span>Structural Health Monitoring</span><span>Environmental Modeling</span>
           </div>
         </div>
+        
 
         <div class="card">
           <h3>What I build</h3>
@@ -373,5 +374,95 @@
   <script>
     document.getElementById("y").textContent = new Date().getFullYear();
   </script>
+  <script>
+  function getGithubUsernameFromLink() {
+    const a = document.getElementById("githubLink");
+    if (!a || !a.href) return null;
+
+    // examples: https://github.com/username or https://github.com/username/
+    const m = a.href.match(/^https?:\/\/github\.com\/([^\/?#]+)\/?$/i);
+    return m ? m[1] : null;
+  }
+
+  function repoCard(repo) {
+    const desc = (repo.description || "").trim() || "Research/engineering project repository.";
+    const topics = (repo.topics || []).slice(0, 5);
+
+    return `
+      <article class="card project-card">
+        <div class="proj-head">
+          <h3><a href="${repo.html_url}" target="_blank" rel="noreferrer">${repo.name}</a></h3>
+          <div class="proj-meta">
+            <span>★ ${repo.stargazers_count}</span>
+            <span>Updated: ${new Date(repo.updated_at).toLocaleDateString()}</span>
+          </div>
+        </div>
+        <p class="proj-desc">${desc}</p>
+        <div class="chips">
+          ${topics.map(t => `<span>${t}</span>`).join("")}
+        </div>
+        <div class="cardlinks">
+          <a href="${repo.html_url}" target="_blank" rel="noreferrer">Open Repo</a>
+          ${repo.homepage ? `<a href="${repo.homepage}" target="_blank" rel="noreferrer">Demo</a>` : ""}
+        </div>
+      </article>
+    `;
+  }
+
+  async function loadGithubProjects() {
+    const user = getGithubUsernameFromLink();
+    const statusEl = document.getElementById("projectsStatus");
+    const grid = document.getElementById("projectsGrid");
+
+    if (!user) {
+      statusEl.textContent = "Tip: set your GitHub link correctly to auto-load repos.";
+      return;
+    }
+
+    try {
+      // Fetch up to 100 repos, include topics (requires preview header)
+      const resp = await fetch(`https://api.github.com/users/${user}/repos?per_page=100&sort=updated`, {
+        headers: { "Accept": "application/vnd.github+json" }
+      });
+
+      if (!resp.ok) throw new Error(`GitHub API error: ${resp.status}`);
+
+      let repos = await resp.json();
+
+      // Filter + rank
+      repos = repos
+        .filter(r => !r.fork && !r.archived)
+        .map(r => ({
+          ...r,
+          // some repos won't include topics in this endpoint consistently; safe fallback
+          topics: Array.isArray(r.topics) ? r.topics : []
+        }));
+
+      // Rank by stars primarily, then recent updates
+      repos.sort((a, b) => {
+        if (b.stargazers_count !== a.stargazers_count) return b.stargazers_count - a.stargazers_count;
+        return new Date(b.updated_at) - new Date(a.updated_at);
+      });
+
+      const top = repos.slice(0, 9);
+
+      if (!top.length) {
+        statusEl.textContent = "No public repos found (or they’re filtered as forks/archived).";
+        return;
+      }
+
+      statusEl.textContent = `Loaded ${top.length} projects from github.com/${user}`;
+      grid.innerHTML = top.map(repoCard).join("");
+
+    } catch (e) {
+      statusEl.textContent = "Couldn’t load projects from GitHub (API rate limit or network).";
+      // Optional fallback: keep this empty or add manual cards if you want
+      console.error(e);
+    }
+  }
+
+  loadGithubProjects();
+</script>
+
 </body>
 </html>
